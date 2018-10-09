@@ -53,13 +53,34 @@ class Script():
         script_body = "\n".join(self.body)
         return PHP_begin + includes_block + script_body + PHP_end
 
+def run(script):
+    '''
+    runs a script via pfSense php-cgi CLI and returns a tuple:
+      - stdout
+      - stderr
+    '''
+    log = logging.getLogger(__virtualname__ + '.' + __name__)
+    shell = oscmd([__PFCLI__], stdin=PIPE, stdout=PIPE, stderr=PIPE)
+
+    log.debug("running commands in php-cgi: \n%s", str(script))
+    raw_out, raw_err = shell.communicate(input=str(script))
+    if raw_out:
+        log.debug("stdout:\n%s", raw_out)
+    if raw_err:
+        log.debug("stderr:\n%s", raw_err)
+
+    if raw_out[:13].lower() == 'content-type:': # strip bogus MIME header
+        out = '\n'.join(raw_out.splitlines()[1:])
+    return out, raw_err
+
+
 def get_config(*args):
     '''
     Optionally takes a string argument as colon-delimited config key:
       - if the key is not truth-y (Default None), the whole config is returned
       - if the key is not found in the config, None is returned
       - if the key is found, the matching part of the config is returned
-      
+
     uses php-cgi CLI to run PHP commands
     returns the pfSense $config nested array structure as native python data
 
@@ -73,20 +94,9 @@ def get_config(*args):
             key = args[0].split(':')
     log = logging.getLogger(__virtualname__ + '.' + __name__)
     __dump_config_php__ = 'print_r(json_encode($config, $options=JSON_PRETTY_PRINT));'
-    shell = oscmd([__PFCLI__], stdin=PIPE, stdout=PIPE, stderr=PIPE)
     get_config_script = Script(__dump_config_php__)
-
-    log.debug("running commands in php-cgi: \n%s", str(get_config_script))
-
-    _out,_err = shell.communicate(input=str(get_config_script))
-    if _out:
-        log.debug("stdout:\n%s", _out)
-    if _err:
-        log.debug("stderr:\n%s", _err)
-
-    #php-cgi emits a HTTP MIME type header line: we need to slice it off
-    _json_out = '\n'.join(_out.splitlines()[1:])
-    pfConfig = json.loads(_json_out)
+    cmd_out, cmd_err = run(get_config_script)
+    pfConfig = json.loads(cmd_out)
 
     if key: # iteratively prune the config for the key or return None
         for i in key:
