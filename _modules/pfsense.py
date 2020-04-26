@@ -65,7 +65,7 @@ def run(php_script):
     '''
     shell = oscmd([__PFCLI__], stdin=PIPE, stdout=PIPE, stderr=PIPE)
 
-    raw_out, raw_err = shell.communicate(input=str(php_script))
+    raw_out, raw_err = shell.communicate(input=str(php_script).encode())
     if raw_out or raw_error:
         log.debug("running commands in php-cgi: \n%s", str(php_script))
     if raw_out:
@@ -74,7 +74,9 @@ def run(php_script):
         log.debug("stderr:\n%s", raw_err)
 
     if raw_out[:13].lower() == 'content-type:': # strip bogus MIME header
-        out = '\n'.join(raw_out.splitlines()[1:])
+        out = b'\n'.join(raw_out.splitlines()[1:])
+    else:
+        out = b'\n'.join(raw_out.splitlines()[1:])
     return out, raw_err
 
 
